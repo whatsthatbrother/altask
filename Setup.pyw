@@ -1,14 +1,15 @@
 # -*- coding: utf-8 -*-
 """
-Tasks Setup 4.3 — custom installer / uninstaller / updater.
+AlTask Setup 5.0 — custom installer / uninstaller / updater.
 Designed & built by Diar F.
 
-Installs Tasks into  C:\\Program Files\\Tasks, adds Desktop + Start menu shortcuts,
+Installs AlTask into  C:\\Program Files\\AlTask, adds Desktop + Start menu shortcuts,
 registers in  Settings > Apps  (with an uninstaller), optional start with Windows.
 
-The same exe is copied into the install folder as "Uninstall Tasks.exe";
+The same exe is copied into the install folder as "Uninstall AlTask.exe";
 started from there (or with --uninstall) it runs as the uninstaller.
-Started by the app with --update it updates in place and restarts Tasks.
+Started by the app with --update it updates in place and restarts AlTask.
+An older "Tasks" install (4.x) is moved over to AlTask automatically.
 """
 import ctypes
 import os
@@ -23,15 +24,17 @@ import tkinter as tk
 from tkinter import filedialog
 from tkinter import font as tkfont
 
-APP = "Tasks"
-VERSION = "4.3"
+APP = "AlTask"
+VERSION = "5.0"
 AUTHOR = "Diar F."
-EXE = "Tasks.exe"
-UNINST_EXE = "Uninstall Tasks.exe"
+EXE = "AlTask.exe"
+UNINST_EXE = "Uninstall AlTask.exe"
 IS_WIN = sys.platform == "win32"
 TEST_DIR = os.environ.get("TASKS_SETUP_TEST")          # dev only: fake install target
 
-UNINST_KEY = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\Tasks"
+UNINST_KEY = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\AlTask"
+OLD_KEY = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\Tasks"      # 4.x, before the rename
+OLD_APP, OLD_EXE = "Tasks", "Tasks.exe"
 OLD_INNO_KEY = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\{8E5B3C2A-6F1D-4B7A-9C3E-2D4F5A6B7C8D}_is1"
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 RUN_NAME = "Detyrat"
@@ -93,7 +96,7 @@ def common_programs():
 
 def desktop_shortcut_exists():
     try:
-        return os.path.exists(os.path.join(common_desktop(), APP + ".lnk"))
+        return any(os.path.exists(os.path.join(common_desktop(), n + ".lnk")) for n in (APP, OLD_APP))
     except Exception:
         return True
 
@@ -123,6 +126,10 @@ def default_dir():
     prev = reg_read(UNINST_KEY, "InstallLocation")
     if prev:
         return prev
+    old = reg_read(OLD_KEY, "InstallLocation")          # upgrading from "Tasks" 4.x
+    if old:
+        parent = os.path.dirname(os.path.normpath(old))
+        return os.path.join(parent, APP)
     pf = os.environ.get("ProgramW6432") or os.environ.get("ProgramFiles") or r"C:\Program Files"
     return os.path.join(pf, APP)
 
@@ -133,12 +140,33 @@ def run_hidden(args, **kw):
 
 def kill_app():
     if IS_WIN and not TEST_DIR:
-        run_hidden(["taskkill", "/f", "/im", EXE])
+        for name in (EXE, OLD_EXE):
+            run_hidden(["taskkill", "/f", "/im", name])
         time.sleep(0.4)
 
 
+def remove_old_tasks():
+    """Move a 4.x install that was still called "Tasks" over to AlTask:
+    remove its files, shortcuts and Settings > Apps entry. The user's tasks are kept."""
+    old = reg_read(OLD_KEY, "InstallLocation")
+    if not old:
+        return
+    for folder in (common_desktop(), common_programs()):
+        try:
+            os.remove(os.path.join(folder, OLD_APP + ".lnk"))
+        except OSError:
+            pass
+    if os.path.isfile(os.path.join(old, OLD_EXE)):        # only ever delete a real Tasks folder
+        shutil.rmtree(old, ignore_errors=True)
+    import winreg
+    try:
+        winreg.DeleteKeyEx(winreg.HKEY_LOCAL_MACHINE, OLD_KEY, winreg.KEY_WOW64_64KEY, 0)
+    except OSError:
+        pass
+
+
 def remove_old_inno():
-    """Silently remove a Tasks 3.0 / 4.0 install made with the old Inno Setup installer."""
+    """Silently remove a 3.0 / 4.0 install made with the old Inno Setup installer."""
     s = reg_read(OLD_INNO_KEY, "UninstallString")
     if not s:
         return
@@ -166,7 +194,7 @@ def make_shortcuts(items):
 
 
 def refresh_icon_cache():
-    """Windows caches icons per file path — make it drop the old (purple) Tasks icon."""
+    """Windows caches icons per file path — make it drop the old (purple) icon."""
     try:
         ctypes.windll.shell32.SHChangeNotify(0x08000000, 0x0000, None, None)   # SHCNE_ASSOCCHANGED
     except Exception:
@@ -232,6 +260,7 @@ def do_install(dest, desktop, startup, report):
     if IS_WIN and not TEST_DIR:
         report(0.05, "Removing the previous version…")
         remove_old_inno()
+        remove_old_tasks()
     os.makedirs(dest, exist_ok=True)
     old_internal = os.path.join(dest, "_internal")
     if os.path.isdir(old_internal):
@@ -254,9 +283,9 @@ def do_install(dest, desktop, startup, report):
 
     if IS_WIN and not TEST_DIR:
         report(0.90, "Creating shortcuts…")
-        sc = [(os.path.join(common_programs(), APP + ".lnk"), exe_path, f"Tasks — by {AUTHOR}")]
+        sc = [(os.path.join(common_programs(), APP + ".lnk"), exe_path, f"AlTask — by {AUTHOR}")]
         if desktop:
-            sc.append((os.path.join(common_desktop(), APP + ".lnk"), exe_path, f"Tasks — by {AUTHOR}"))
+            sc.append((os.path.join(common_desktop(), APP + ".lnk"), exe_path, f"AlTask — by {AUTHOR}"))
         make_shortcuts(sc)
         report(0.96, "Registering…")
         register_uninstaller(dest, size_kb)
@@ -268,7 +297,7 @@ def do_install(dest, desktop, startup, report):
 
 
 def do_uninstall(dest, remove_data, report):
-    report(0.05, "Closing Tasks…")
+    report(0.05, "Closing AlTask…")
     kill_app()
     if IS_WIN and not TEST_DIR:
         report(0.2, "Removing shortcuts…")
@@ -435,7 +464,7 @@ class SetupUI:
             self.page_uninstall()
         elif update:
             self.root.after(150, self.start_update)
-            self.page_progress(f"Updating {APP} to {VERSION}…", "Your tasks stay exactly where they are.")
+            self.page_progress(f"Updating {APP.upper()} to {VERSION}…", "Your tasks stay exactly where they are.")
         else:
             self.page_welcome()
 
@@ -561,7 +590,7 @@ class SetupUI:
     # ---------- pages: install ----------
     def page_welcome(self):
         self.clear()
-        self.heading(f"{APP} {VERSION} setup", f"Install {APP} on this PC",
+        self.heading(f"{APP} {VERSION} setup", f"Install {APP.upper()} on this PC",
                      "A clean, always-there task panel on the right side of your screen. "
                      "Write down what needs to be done — tick it off when it's done.")
 
@@ -585,7 +614,7 @@ class SetupUI:
         opts.pack(fill="x", pady=(self.px(22), 0))
         self.c_desktop = Check(opts, self, "Create a desktop shortcut", True)
         self.c_desktop.pack(fill="x", pady=(0, self.px(12)))
-        self.c_startup = Check(opts, self, "Start Tasks when Windows starts", False,
+        self.c_startup = Check(opts, self, "Start AlTask when Windows starts", False,
                                sub="Opens the panel automatically after you sign in")
         self.c_startup.pack(fill="x")
 
@@ -596,7 +625,7 @@ class SetupUI:
 
     def browse(self):
         d = filedialog.askdirectory(parent=self.root, initialdir=os.path.dirname(self.path.get()) or "C:\\",
-                                    title="Choose where to install Tasks")
+                                    title="Choose where to install AlTask")
         if d:
             d = os.path.normpath(d)
             if os.path.basename(d).lower() != APP.lower():
@@ -610,7 +639,7 @@ class SetupUI:
         self.dest = os.path.normpath(self.path.get().strip() or default_dir())
         desktop, startup = self.c_desktop.value, self.c_startup.value
         self.root.unbind("<Return>")
-        self.page_progress(f"Installing {APP}…", "This only takes a few seconds.")
+        self.page_progress(f"Installing {APP.upper()}…", "This only takes a few seconds.")
         self.run_job(lambda rep: do_install(self.dest, desktop, startup, rep), self.page_done)
 
     # ---------- update (started by the app) ----------
@@ -642,7 +671,7 @@ class SetupUI:
         self.bar.pack(fill="x")
         self.status = tk.Label(self.body, text="", font=self.f_small, bg=BG, fg=FAINT, anchor="w")
         self.status.pack(fill="x", pady=(self.px(10), 0))
-        tk.Label(self.body, text=f"Tasks {VERSION}  ·  by {AUTHOR}", font=self.f_small, bg=BG,
+        tk.Label(self.body, text=f"{APP} {VERSION}  ·  by {AUTHOR}", font=self.f_small, bg=BG,
                  fg=FAINT).pack(side="bottom", anchor="w")
 
     def run_job(self, job, on_done):
@@ -696,7 +725,7 @@ class SetupUI:
     def page_done(self):
         self.clear()
         self.success_mark(self.body).pack(anchor="w", pady=(self.px(10), 0))
-        tk.Label(self.body, text=f"{APP} is ready", font=self.f_h1, bg=BG, fg=TEXT, anchor="w").pack(
+        tk.Label(self.body, text=f"{APP.upper()} is ready", font=self.f_h1, bg=BG, fg=TEXT, anchor="w").pack(
             fill="x", pady=(self.px(20), self.px(8)))
         tk.Label(self.body, text="You'll find it on your Desktop and in the Start menu.\n"
                                  "Your tasks are kept safe across updates.",
@@ -721,14 +750,14 @@ class SetupUI:
     def page_error(self, msg):
         self.clear()
         self.heading("Something went wrong", "Setup could not finish",
-                     f"{msg}\n\nClose any open Tasks window and run Setup again. "
+                     f"{msg}\n\nClose any open AlTask window and run Setup again. "
                      "If it keeps failing, right-click Setup and choose “Run as administrator”.")
         self.footer([("Close", self.root.destroy, "primary", self.px(120))])
 
     # ---------- pages: uninstall ----------
     def page_uninstall(self):
         self.clear()
-        self.heading(f"{APP} {VERSION}", f"Uninstall {APP}?",
+        self.heading(f"{APP} {VERSION}", f"Uninstall {APP.upper()}?",
                      f"This removes {APP} from this PC, including its shortcuts.")
         box = tk.Frame(self.body, bg=SURFACE, highlightthickness=1, highlightbackground=LINE)
         box.pack(fill="x", pady=(self.px(26), 0))
@@ -749,7 +778,7 @@ class SetupUI:
     def page_removed(self):
         self.clear()
         self.success_mark(self.body).pack(anchor="w", pady=(self.px(10), 0))
-        tk.Label(self.body, text=f"{APP} was removed", font=self.f_h1, bg=BG, fg=TEXT, anchor="w").pack(
+        tk.Label(self.body, text=f"{APP.upper()} was removed", font=self.f_h1, bg=BG, fg=TEXT, anchor="w").pack(
             fill="x", pady=(self.px(20), self.px(8)))
         tk.Label(self.body, text="Thanks for using it.", font=self.f_body, bg=BG, fg=MUTED,
                  anchor="w").pack(fill="x")

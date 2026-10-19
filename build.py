@@ -1,4 +1,4 @@
-"""Builds Tasks.exe and the installer dist/Tasks-Setup.exe (Windows).
+"""Builds AlTask.exe and the installer dist/AlTask-Setup.exe (Windows).
 
     py build.py
 
@@ -21,25 +21,25 @@ def pyinstaller(*args):
 def main():
     tools.config()                                   # bakes the update repo into the app
 
-    print("\n== Tasks.exe ==")
-    pyinstaller("--clean", "--onedir", "--noconsole", "--name", "Tasks",
+    print("\n== AlTask.exe ==")
+    pyinstaller("--clean", "--onedir", "--noconsole", "--name", "AlTask",
                 "--icon", "tasks.ico", "--version-file", "version_info.txt",
                 "--add-data", f"tasks.ico{SEP}.", "Tasks.pyw")
 
     print("\n== payload ==")
     os.makedirs("build", exist_ok=True)
-    shutil.make_archive("build/payload", "zip", "dist/Tasks")
+    shutil.make_archive("build/payload", "zip", "dist/AlTask")
 
-    print("\n== Tasks-Setup.exe ==")
+    print("\n== AlTask-Setup.exe ==")
     excludes = ["unittest", "pydoc", "doctest", "xmlrpc", "sqlite3", "asyncio", "multiprocessing"]
-    args = ["--onefile", "--noconsole", "--uac-admin", "--name", "Tasks-Setup",
+    args = ["--onefile", "--noconsole", "--uac-admin", "--name", "AlTask-Setup",
             "--icon", "tasks.ico", "--version-file", "setup_version_info.txt",
             "--splash", "splash.png",
             "--add-data", f"build/payload.zip{SEP}.", "--add-data", f"assets{SEP}assets"]
     for m in excludes:
         args += ["--exclude-module", m]
     pyinstaller(*args, "Setup.pyw")
-    print("\nDone: dist/Tasks-Setup.exe")
+    print("\nDone: dist/AlTask-Setup.exe")
 
 
 if __name__ == "__main__":

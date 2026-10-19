@@ -1,0 +1,405 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AlTask — your tasks, always on the right side</title>
+<meta name="description" content="AlTask is a clean, always-there task panel for Windows 10 and 11, docked to the right side of your screen. Free. Designed and built by Diar F.">
+<meta name="theme-color" content="#0e0e10">
+<meta property="og:title" content="AlTask — a task panel for Windows">
+<meta property="og:description" content="Write down what needs to be done. Tick it off when it's done. Free for Windows 10 & 11 — by Diar F.">
+<meta property="og:image" content="https://whatsthatbrother.github.io/altask/img/setup-welcome.png">
+<meta property="og:type" content="website">
+<link rel="icon" type="image/png" href="img/favicon.png">
+<link rel="apple-touch-icon" href="img/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --red: #e41e20;
+    --red-2: #b3141b;
+    --red-hover: #c9161a;
+    --bg: #0e0e10;
+    --bg-2: #141416;
+    --card: #18181b;
+    --card-2: #1f1f23;
+    --line: #2a2a30;
+    --text: #f4f4f5;
+    --muted: #a9a9b2;
+    --faint: #73737c;
+    --green: #2fbf7a;
+    --radius: 16px;
+    --max: 1160px;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.6 Inter, "Segoe UI", system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    font-feature-settings: "cv05" 1;   /* "l" with a tail, so AlTask never reads as "AITask" */
+  }
+  a { color: inherit; text-decoration: none; }
+  img { max-width: 100%; display: block; }
+  .wrap { max-width: var(--max); margin: 0 auto; padding: 0 24px; }
+  .wordmark { font-weight: 800; letter-spacing: .22em; }
+
+  /* nav */
+  nav {
+    position: sticky; top: 0; z-index: 10;
+    background: rgba(14,14,16,.82); backdrop-filter: blur(12px);
+    border-bottom: 1px solid rgba(255,255,255,.06);
+  }
+  nav .wrap { display: flex; align-items: center; gap: 28px; height: 68px; }
+  .brand { display: flex; align-items: center; gap: 12px; font-size: 15px; }
+  .brand img { width: 34px; height: 34px; }
+  .links { display: flex; gap: 26px; margin-left: auto; font-size: 14px; color: var(--muted); }
+  .links a:hover { color: var(--text); }
+  .btn {
+    display: inline-flex; align-items: center; gap: 10px; border-radius: 12px;
+    font-weight: 600; font-size: 15px; padding: 14px 22px; transition: background .15s, transform .15s, border-color .15s;
+    border: 1px solid transparent; cursor: pointer;
+  }
+  .btn svg { width: 18px; height: 18px; flex: none; }
+  .btn-red { background: var(--red); color: #fff; box-shadow: 0 10px 30px -10px rgba(228,30,32,.7); }
+  .btn-red:hover { background: var(--red-hover); transform: translateY(-1px); }
+  .btn-ghost { border-color: var(--line); color: var(--text); }
+  .btn-ghost:hover { border-color: #44444c; background: var(--card); }
+  .btn-sm { padding: 9px 16px; font-size: 14px; border-radius: 10px; }
+
+  /* hero */
+  .hero { position: relative; overflow: hidden; padding: 84px 0 96px; }
+  .hero::before {
+    content: ""; position: absolute; inset: -20% -10% auto auto; width: 820px; height: 820px;
+    background: radial-gradient(closest-side, rgba(228,30,32,.30), rgba(228,30,32,0));
+    pointer-events: none;
+  }
+  .hero .wrap { display: grid; grid-template-columns: 1.05fr .95fr; gap: 56px; align-items: center; position: relative; }
+  .eyebrow {
+    display: inline-flex; align-items: center; gap: 10px; font-size: 12px; font-weight: 700;
+    letter-spacing: .14em; color: var(--red); text-transform: uppercase;
+  }
+  .eyebrow i { width: 22px; height: 22px; background: var(--red); display: inline-block;
+    -webkit-mask: url(img/eagle.svg) center/contain no-repeat; mask: url(img/eagle.svg) center/contain no-repeat; }
+  h1 { font-size: clamp(40px, 5.4vw, 68px); line-height: 1.04; letter-spacing: -.03em; margin: 18px 0 20px; font-weight: 800; }
+  h1 em { font-style: normal; color: var(--red); }
+  .lead { font-size: 19px; color: var(--muted); max-width: 520px; margin: 0 0 32px; }
+  .cta { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+  .meta { margin-top: 18px; font-size: 13px; color: var(--faint); display: flex; flex-wrap: wrap; gap: 6px 18px; }
+  .meta b { color: var(--muted); font-weight: 600; }
+
+  .stage {
+    position: relative; border-radius: 24px; padding: 34px 34px 0 34px; height: 560px; overflow: hidden;
+    background: linear-gradient(160deg, #ea2a2e 0%, #a3141b 100%);
+    box-shadow: 0 40px 80px -30px rgba(0,0,0,.8), inset 0 1px 0 rgba(255,255,255,.18);
+  }
+  .stage::before {          /* big eagle watermark */
+    content: ""; position: absolute; width: 420px; height: 450px; left: -70px; top: 70px; background: rgba(0,0,0,.88);
+    -webkit-mask: url(img/eagle.svg) center/contain no-repeat; mask: url(img/eagle.svg) center/contain no-repeat;
+    filter: drop-shadow(0 12px 18px rgba(90,0,6,.5));
+  }
+  .stage .panel {
+    position: absolute; right: 0; top: 0; bottom: 0; width: 340px;
+    border-left: 1px solid rgba(255,255,255,.12); box-shadow: -30px 0 60px -20px rgba(0,0,0,.6);
+    background: #141416;
+  }
+  .stage .panel img { width: 100%; }
+  .stage .tag {
+    position: absolute; left: 28px; bottom: 26px; color: #fff; font-size: 12px; letter-spacing: .14em; font-weight: 700;
+    opacity: .9;
+  }
+
+  /* sections */
+  section { padding: 96px 0; }
+  .sec-head { max-width: 640px; margin-bottom: 48px; }
+  .sec-head h2 { font-size: clamp(30px, 3.6vw, 44px); line-height: 1.1; letter-spacing: -.02em; margin: 14px 0 12px; }
+  .sec-head p { color: var(--muted); font-size: 18px; margin: 0; }
+
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  .feat {
+    background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 26px;
+    transition: border-color .15s, transform .15s;
+  }
+  .feat:hover { border-color: #3a3a42; transform: translateY(-2px); }
+  .feat .ic {
+    width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center;
+    background: rgba(228,30,32,.12); color: var(--red); margin-bottom: 18px;
+  }
+  .feat .ic svg { width: 22px; height: 22px; }
+  .feat h3 { margin: 0 0 6px; font-size: 18px; letter-spacing: -.01em; }
+  .feat p { margin: 0; color: var(--muted); font-size: 15px; }
+
+  .shots { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; align-items: start; }
+  .shot { margin: 0; }
+  .shot .frame {
+    border-radius: 14px; overflow: hidden; border: 1px solid var(--line); background: var(--bg-2);
+    box-shadow: 0 30px 60px -30px rgba(0,0,0,.9); max-height: 520px;
+  }
+  .shot figcaption { margin-top: 14px; font-size: 14px; color: var(--muted); }
+  .shot figcaption b { color: var(--text); display: block; font-size: 15px; margin-bottom: 2px; }
+
+  .split { display: grid; grid-template-columns: .9fr 1.1fr; gap: 56px; align-items: center; }
+  .split .frame { border-radius: 16px; overflow: hidden; border: 1px solid var(--line); box-shadow: 0 40px 80px -40px rgba(0,0,0,.9); }
+  .checks { list-style: none; padding: 0; margin: 26px 0 0; display: grid; gap: 14px; }
+  .checks li { display: flex; gap: 12px; color: var(--muted); }
+  .checks li::before {
+    content: ""; flex: none; width: 22px; height: 22px; border-radius: 50%; margin-top: 1px;
+    background: var(--red) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M6 12.5l4 4 8-9' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/14px no-repeat;
+  }
+  .checks li b { color: var(--text); font-weight: 600; }
+
+  .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; counter-reset: s; }
+  .step { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 26px; }
+  .step::before {
+    counter-increment: s; content: counter(s); display: grid; place-items: center; width: 34px; height: 34px;
+    border-radius: 50%; background: var(--red); color: #fff; font-weight: 700; margin-bottom: 16px;
+  }
+  .step h3 { margin: 0 0 6px; font-size: 17px; }
+  .step p { margin: 0; color: var(--muted); font-size: 15px; }
+  .note {
+    margin-top: 22px; padding: 16px 20px; border-radius: 12px; background: var(--card-2);
+    border: 1px solid var(--line); color: var(--muted); font-size: 14px;
+  }
+  .note b { color: var(--text); }
+
+  .band {
+    position: relative; overflow: hidden; border-radius: 24px; padding: 64px 56px;
+    background: linear-gradient(135deg, #e8262a, #a3141b); display: flex; align-items: center; gap: 40px;
+  }
+  .band::after {
+    content: ""; position: absolute; right: -40px; top: -30px; width: 360px; height: 390px; background: rgba(0,0,0,.85);
+    -webkit-mask: url(img/eagle.svg) center/contain no-repeat; mask: url(img/eagle.svg) center/contain no-repeat;
+  }
+  .band h2 { margin: 0 0 10px; font-size: clamp(28px, 3.4vw, 42px); letter-spacing: -.02em; line-height: 1.1; }
+  .band p { margin: 0 0 26px; color: #ffe1e1; font-size: 17px; max-width: 520px; }
+  .band .btn-white { background: #fff; color: var(--red-2); }
+  .band .btn-white:hover { background: #ffecec; transform: translateY(-1px); }
+  .band > div { position: relative; z-index: 1; }
+
+  footer { border-top: 1px solid rgba(255,255,255,.06); padding: 40px 0 56px; color: var(--faint); font-size: 14px; }
+  footer .wrap { display: flex; flex-wrap: wrap; gap: 16px 32px; align-items: center; }
+  footer .by { color: var(--muted); }
+  footer .by b { color: var(--text); }
+  footer .right { margin-left: auto; display: flex; gap: 22px; }
+  footer a:hover { color: var(--text); }
+
+  @media (max-width: 960px) {
+    .hero .wrap, .split { grid-template-columns: 1fr; }
+    .grid, .steps { grid-template-columns: 1fr 1fr; }
+    .shots { grid-template-columns: 1fr 1fr; }
+    .shots .shot:last-child { display: none; }
+    .stage { height: 500px; }
+    .links { display: none; }
+    nav .btn { margin-left: auto; }
+  }
+  @media (max-width: 620px) {
+    .wrap { padding: 0 16px; }
+    .hero { padding: 48px 0 64px; }
+    section { padding: 64px 0; }
+    .grid, .steps, .shots { grid-template-columns: 1fr; }
+    .shots .shot:last-child { display: block; }
+    .stage { height: 440px; padding: 0; }
+    .stage::before { width: 260px; height: 280px; left: -40px; top: 40px; }
+    .stage .panel { width: 72%; }
+    .band { padding: 44px 24px; }
+    .band::after { width: 220px; height: 240px; opacity: .5; }
+    footer .right { margin-left: 0; }
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap">
+    <a class="brand" href="#"><img src="img/icon-256.png" alt=""><span class="wordmark">ALTASK</span></a>
+    <div class="links">
+      <a href="#features">Features</a>
+      <a href="#look">Screenshots</a>
+      <a href="#install">Install</a>
+      <a href="https://github.com/whatsthatbrother/altask">GitHub</a>
+    </div>
+    <a class="btn btn-red btn-sm dl" href="https://github.com/whatsthatbrother/altask/releases/latest/download/AlTask-Setup.exe">Download</a>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <div>
+      <span class="eyebrow"><i></i>Free for Windows 10 &amp; 11</span>
+      <h1>Your tasks, always on the <em>right side.</em></h1>
+      <p class="lead">AlTask is a clean task panel that lives on the right edge of your screen. Write down what needs to be done — tick it off when it's done. No accounts, no clutter.</p>
+      <div class="cta">
+        <a class="btn btn-red dl" href="https://github.com/whatsthatbrother/altask/releases/latest/download/AlTask-Setup.exe">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"/><path d="M7 10.5l5 5 5-5"/><path d="M5 20h14"/></svg>
+          Download for Windows
+        </a>
+        <a class="btn btn-ghost" href="#look">See it in action</a>
+      </div>
+      <div class="meta">
+        <span>Version <b id="ver">5.0</b></span>
+        <span id="date-wrap" hidden>Released <b id="date"></b></span>
+        <span id="size-wrap" hidden><b id="size"></b></span>
+        <span>Updates itself</span>
+      </div>
+    </div>
+
+    <div class="stage" aria-hidden="true">
+      <div class="panel"><img src="img/app-dark.png" alt=""></div>
+      <span class="tag wordmark">ALTASK</span>
+    </div>
+  </div>
+</header>
+
+<section id="features">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="eyebrow"><i></i>Features</span>
+      <h2>Small app. Everything you need.</h2>
+      <p>Built for people who just want a list they can see all day — without opening anything.</p>
+    </div>
+    <div class="grid">
+      <div class="feat">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/></svg></div>
+        <h3>Docked to the right</h3>
+        <p>Sits along the right edge, above your other windows. Collapse it to a slim tab or drag to make it wider.</p>
+      </div>
+      <div class="feat">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.8 2.8L16.5 9"/></svg></div>
+        <h3>Done in one click</h3>
+        <p>Tick a task and it moves to Completed with the time you finished it. Double-click any task to edit it.</p>
+      </div>
+      <div class="feat">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M10 11v6M14 11v6"/><path d="M6 7l1 13h10l1-13"/><path d="M9 7V4h6v3"/></svg></div>
+        <h3>Nothing lost by accident</h3>
+        <p>AlTask asks before deleting, and Ctrl+Z brings back anything you removed.</p>
+      </div>
+      <div class="feat">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z"/></svg></div>
+        <h3>Light, dark or automatic</h3>
+        <p>Follows your Windows theme, or pick one yourself. Three text sizes so it's easy to read.</p>
+      </div>
+      <div class="feat">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v5h-5"/></svg></div>
+        <h3>Updates itself</h3>
+        <p>When a new version is out, AlTask tells you and installs it with one click. Every download is checksum-verified.</p>
+      </div>
+      <div class="feat">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></div>
+        <h3>Your tasks stay on your PC</h3>
+        <p>No account and no cloud. Your list is a small file on your computer, kept safe across every update.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="look" style="background: var(--bg-2)">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="eyebrow"><i></i>Screenshots</span>
+      <h2>Made to be looked at all day.</h2>
+      <p>Clear type, calm colours and a red accent — in light and dark.</p>
+    </div>
+    <div class="shots">
+      <figure class="shot">
+        <div class="frame"><img src="img/app-light.png" alt="AlTask in light mode with a to-do list and completed tasks" loading="lazy"></div>
+        <figcaption><b>Light mode</b>To do on top, completed below.</figcaption>
+      </figure>
+      <figure class="shot">
+        <div class="frame"><img src="img/menu-dark.png" alt="AlTask settings menu with theme, text size and update check" loading="lazy"></div>
+        <figcaption><b>Everything in one menu</b>Theme, text size, always-on-top and updates.</figcaption>
+      </figure>
+      <figure class="shot">
+        <div class="frame"><img src="img/update-dark.png" alt="AlTask showing an update available banner" loading="lazy"></div>
+        <figcaption><b>One-click updates</b>New versions show up right in the panel.</figcaption>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap split">
+    <div>
+      <span class="eyebrow"><i></i>The installer</span>
+      <h2 style="font-size: clamp(30px,3.6vw,44px); line-height:1.1; letter-spacing:-.02em; margin:14px 0 12px">Installed in seconds.</h2>
+      <p style="color:var(--muted); font-size:18px; margin:0">A one-file installer with a bit of character. Pick a folder, choose your shortcuts, done.</p>
+      <ul class="checks">
+        <li><span><b>Desktop &amp; Start menu</b> shortcuts, and an entry in Settings › Apps</span></li>
+        <li><span><b>Start with Windows</b> if you want it there every morning</span></li>
+        <li><span><b>Clean uninstall</b> — keep or delete your tasks, your choice</span></li>
+      </ul>
+    </div>
+    <div class="frame"><img src="img/setup-welcome.png" alt="The AlTask installer with the Albanian eagle" loading="lazy"></div>
+  </div>
+</section>
+
+<section id="install" style="background: var(--bg-2)">
+  <div class="wrap">
+    <div class="sec-head">
+      <span class="eyebrow"><i></i>Get started</span>
+      <h2>Up and running in three steps.</h2>
+    </div>
+    <div class="steps">
+      <div class="step"><h3>Download</h3><p>Get <b>AlTask-Setup.exe</b> — one file, about 24 MB.</p></div>
+      <div class="step"><h3>Install</h3><p>Open it, click <b>Install</b> and allow the Windows prompt (it installs into Program Files).</p></div>
+      <div class="step"><h3>Write it down</h3><p>AlTask opens on the right of your screen. Type a task and press Enter.</p></div>
+    </div>
+    <div class="note"><b>Seeing “Windows protected your PC”?</b> AlTask isn't code-signed yet, so SmartScreen asks first. Click <b>More info → Run anyway</b>. The installer is built in the open on GitHub from this project's source code.</div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="band">
+      <div>
+        <h2>Ready when you are.</h2>
+        <p>Free, light and always on hand. Download AlTask and clear your head.</p>
+        <a class="btn btn-white dl" href="https://github.com/whatsthatbrother/altask/releases/latest/download/AlTask-Setup.exe">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"/><path d="M7 10.5l5 5 5-5"/><path d="M5 20h14"/></svg>
+          Download AlTask <span id="ver2">5.0</span>
+        </a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <a class="brand" href="#"><img src="img/icon-256.png" alt="" style="width:28px;height:28px"><span class="wordmark">ALTASK</span></a>
+    <span class="by">Designed &amp; built by <b>Diar F.</b></span>
+    <span>© <span id="yr">2026</span></span>
+    <div class="right">
+      <a href="https://github.com/whatsthatbrother/altask">Source on GitHub</a>
+      <a href="https://github.com/whatsthatbrother/altask/releases">All releases</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+  // Show the real latest version, date and size from GitHub (falls back to the text above).
+  (function () {
+    document.getElementById("yr").textContent = new Date().getFullYear();
+    fetch("https://api.github.com/repos/whatsthatbrother/altask/releases/latest")
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (rel) {
+        if (!rel || !rel.tag_name) return;
+        var v = rel.tag_name.replace(/^v/, "");
+        document.getElementById("ver").textContent = v;
+        document.getElementById("ver2").textContent = v;
+        if (rel.published_at) {
+          var d = new Date(rel.published_at);
+          document.getElementById("date").textContent =
+            d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+          document.getElementById("date-wrap").hidden = false;
+        }
+        var exe = (rel.assets || []).filter(function (a) { return /\.exe$/i.test(a.name); })[0];
+        if (exe) {
+          document.getElementById("size").textContent = (exe.size / 1048576).toFixed(0) + " MB";
+          document.getElementById("size-wrap").hidden = false;
+        }
+      })
+      .catch(function () {});
+  })();
+</script>
+</body>
+</html>

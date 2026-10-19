@@ -1,3 +1,3 @@
-- Smoother, sharper tick marks when you complete a task
-- Update check is easier to find: it sits at the top of the menu and in About, shows when it last checked, and Tasks now checks every hour
-- Taskbar icon now shows the red eagle (old cached purple icon is refreshed)
+- Tasks is now AlTask! New name, same app — your tasks are kept
+- Moves to C:\Program Files\AlTask automatically (old Tasks shortcuts are replaced)
+- New website: https://whatsthatbrother.github.io/altask/

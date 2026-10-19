@@ -1,6 +1,6 @@
-"""Build helpers for Tasks (used by build.bat and publish.bat).
+"""Build helpers for AlTask (used by build.bat and publish.bat).
 
-  py tools.py config     -> writes update_config.py from repo.txt (baked into Tasks.exe)
+  py tools.py config     -> writes update_config.py from repo.txt (baked into AlTask.exe)
   py tools.py manifest   -> writes dist/latest.json (version, download url, sha256, notes)
   py tools.py version    -> prints the version from Tasks.pyw
 """
@@ -29,11 +29,11 @@ def manifest():
     r, v = repo(), version()
     if not r:
         sys.exit("Set your GitHub repo in repo.txt first (e.g. diarf/tasks).")
-    exe = ROOT / "dist" / "Tasks-Setup.exe"
+    exe = ROOT / "dist" / "AlTask-Setup.exe"
     sha = hashlib.sha256(exe.read_bytes()).hexdigest()
     notes = (ROOT / "notes.txt").read_text(encoding="utf-8").strip() if (ROOT / "notes.txt").exists() else ""
     data = {"version": v, "sha256": sha, "notes": notes,
-            "url": f"https://github.com/{r}/releases/download/v{v}/Tasks-Setup.exe"}
+            "url": f"https://github.com/{r}/releases/download/v{v}/AlTask-Setup.exe"}
     (ROOT / "dist" / "latest.json").write_text(json.dumps(data, indent=2), encoding="utf-8")
     print(f"latest.json -> v{v}  sha256 {sha[:16]}...")
 
