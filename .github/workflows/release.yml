@@ -1,0 +1,59 @@
+# Builds the Windows installer and publishes a GitHub release whenever a
+# version tag (e.g. v4.3) is pushed. Installed copies of Tasks read
+# releases/latest/download/latest.json and offer the update to the user.
+name: Build & release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Check tag matches VERSION in Tasks.pyw and Setup.pyw
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: python
+        run: |
+          import re, sys
+          tag = "${{ github.ref_name }}".lstrip("v")
+          for f in ("Tasks.pyw", "Setup.pyw"):
+              v = re.search(r'^VERSION = "([^"]+)"', open(f, encoding="utf-8").read(), re.M).group(1)
+              if v != tag:
+                  sys.exit(f"{f} has VERSION {v} but the tag is v{tag}")
+
+      - name: Install PyInstaller
+        run: python -m pip install --upgrade pip pyinstaller
+
+      - name: Build
+        run: python build.py
+
+      - name: Write latest.json
+        run: python tools.py manifest
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Tasks ${{ github.ref_name }}
+          body_path: notes.txt
+          files: |
+            dist/Tasks-Setup.exe
+            dist/latest.json
+
+      - name: Keep the build (manual runs)
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: Tasks-Setup
+          path: dist/Tasks-Setup.exe

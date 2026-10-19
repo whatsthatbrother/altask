@@ -1,0 +1,4 @@
+- New red eagle icon and red theme
+- New settings menu that no longer closes by itself
+- Automatic updates
+- Faster installer start
