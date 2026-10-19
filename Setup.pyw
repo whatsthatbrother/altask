@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-AlTask Setup 5.0 — custom installer / uninstaller / updater.
+AlTask Setup 5.1 — custom installer / uninstaller / updater.
 Designed & built by Diar F.
 
 Installs AlTask into  C:\\Program Files\\AlTask, adds Desktop + Start menu shortcuts,
@@ -25,7 +25,7 @@ from tkinter import filedialog
 from tkinter import font as tkfont
 
 APP = "AlTask"
-VERSION = "5.0"
+VERSION = "5.1"
 AUTHOR = "Diar F."
 EXE = "AlTask.exe"
 UNINST_EXE = "Uninstall AlTask.exe"

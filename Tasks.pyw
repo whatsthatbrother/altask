@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-AlTask v5.0 — a task panel docked to the right edge of the screen (Windows 10 / 11).
+AlTask v5.1 — a task panel docked to the right edge of the screen (Windows 10 / 11).
 
 - Pure Python 3 standard library (tkinter). No extra packages.
 - Run: double-click Tasks.pyw  (or:  pythonw Tasks.pyw)  — built as AlTask.exe
@@ -8,10 +8,12 @@ AlTask v5.0 — a task panel docked to the right edge of the screen (Windows 10 
 - Data: %APPDATA%\\DetyratNote\\tasks.json  (same file as v1, nothing is lost)
 
 Shortcuts:
-  Enter          add task             Ctrl+N   focus the input
-  Double-click   edit task            Ctrl+Z   undo delete / clear
+  Enter          add task             Ctrl+N       focus the input
+  Double-click   edit task            Ctrl+Z       undo delete / clear
+  Drag a task    reorder              Ctrl+Alt+T   open AlTask from anywhere
 """
 import ctypes
+import ctypes.wintypes
 import hashlib
 import json
 import os
@@ -22,11 +24,11 @@ import tempfile
 import threading
 import urllib.request
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 import tkinter as tk
 from tkinter import font as tkfont
 
-VERSION = "5.0"
+VERSION = "5.1"
 AUTHOR = "Diar F."
 try:                                    # written by build.bat from repo.txt
     from update_config import UPDATE_REPO
@@ -57,6 +59,9 @@ THEMES = {
         track="#e8e8ec", on_accent="#ffffff", scrim="#dedee3",
     ),
 }
+
+DEFAULT_LIST = {"id": "main", "name": "My tasks"}
+STAR = "#f5b301"
 
 DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 MONTHS = ["January", "February", "March", "April", "May", "June", "July",
@@ -144,6 +149,58 @@ def fmt_short(iso):
     if (today - d.date()).days == 1:
         return f"yesterday {hm}"
     return f"{MONTHS[d.month - 1][:3]} {d.day}, {hm}"
+
+
+def fmt_due(iso):
+    """'Today 18:00', 'Tomorrow 09:00', 'Wed 22 Oct 09:00'."""
+    try:
+        d = datetime.fromisoformat(iso)
+    except Exception:
+        return ""
+    days = (d.date() - datetime.now().date()).days
+    hm = d.strftime("%H:%M")
+    if days == 0:
+        return f"Today {hm}"
+    if days == 1:
+        return f"Tomorrow {hm}"
+    if days == -1:
+        return f"Yesterday {hm}"
+    if 1 < days < 7:
+        return f"{DAYS[d.weekday()]} {hm}"
+    return f"{DAYS[d.weekday()][:3]} {d.day} {MONTHS[d.month - 1][:3]} {hm}"
+
+
+def parse_due(date_s, time_s):
+    """Parse 'dd.mm.yyyy' / 'dd.mm' / 'today' / 'tomorrow' + 'hh:mm'. Returns datetime or raises ValueError."""
+    now = datetime.now()
+    ds = date_s.strip().lower()
+    if ds in ("", "today", "sot"):
+        day = now.date()
+    elif ds in ("tomorrow", "neser", "nesër"):
+        day = (now + timedelta(days=1)).date()
+    else:
+        nums = [int(x) for x in re.split(r"[.\-/ ]+", ds) if x.isdigit()]
+        if len(nums) == 3 and nums[0] > 31:                     # yyyy-mm-dd
+            y, m, dd = nums
+        elif len(nums) == 3:                                    # dd.mm.yyyy
+            dd, m, y = nums
+            y = y + 2000 if y < 100 else y
+        elif len(nums) == 2:                                    # dd.mm (this year, or next if passed)
+            dd, m = nums
+            y = now.year
+        else:
+            raise ValueError("Use a date like 21.10.2026")
+        day = datetime(y, m, dd).date()
+        if len(nums) == 2 and day < now.date():
+            day = datetime(y + 1, m, dd).date()
+    tnums = [int(x) for x in re.split(r"[:.h ]+", time_s.strip().lower()) if x.isdigit()]
+    if not tnums:
+        hh, mm = 9, 0
+    else:
+        hh, mm = tnums[0], (tnums[1] if len(tnums) > 1 else 0)
+    if not (0 <= hh < 24 and 0 <= mm < 60):
+        raise ValueError("Use a time like 14:30")
+    return datetime(day.year, day.month, day.day, hh, mm)
 
 
 def fmt_today():
@@ -271,7 +328,9 @@ class Store:
         self.data = {"tasks": [],
                      "settings": {"width": 340, "topmost": True, "collapsed": False,
                                   "show_done": True, "theme": "system",
-                                  "confirm_delete": True, "text_size": "large"}}
+                                  "confirm_delete": True, "text_size": "large",
+                                  "lists": [dict(DEFAULT_LIST)], "current_list": "main",
+                                  "hotkey": True}}
         self.load()
 
     @property
@@ -288,6 +347,7 @@ class Store:
                 d = json.load(f)
             self.data["tasks"] = list(d.get("tasks", []))
             self.data["settings"].update(d.get("settings", {}))
+            self._migrate()
         except FileNotFoundError:
             pass
         except Exception:
@@ -296,12 +356,55 @@ class Store:
             except Exception:
                 pass
 
+    def _migrate(self):
+        """5.1: every task belongs to a list (older tasks go to the first one)."""
+        st = self.data["settings"]
+        if not st.get("lists"):
+            st["lists"] = [dict(DEFAULT_LIST)]
+        ids = {l["id"] for l in st["lists"]}
+        first = st["lists"][0]["id"]
+        if st.get("current_list") not in ids:
+            st["current_list"] = first
+        for t in self.data["tasks"]:
+            if t.get("list") not in ids:
+                t["list"] = first
+
     def save(self):
         os.makedirs(DATA_DIR, exist_ok=True)
         tmp = DATA_FILE + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(self.data, f, ensure_ascii=False, indent=2)
         os.replace(tmp, DATA_FILE)
+
+
+# ───────────────────── global hotkey (Ctrl+Alt+T) ─────────────────────
+class _HotKey(threading.Thread):
+    """Registers Ctrl+Alt+T for the whole system and reports presses through a queue."""
+    MOD = 0x0002 | 0x0001 | 0x4000          # CTRL | ALT | NOREPEAT
+    VK_T = 0x54
+
+    def __init__(self, q):
+        super().__init__(daemon=True)
+        self.q = q
+        self.tid = None
+
+    def run(self):
+        u = ctypes.windll.user32
+        self.tid = ctypes.windll.kernel32.GetCurrentThreadId()
+        if not u.RegisterHotKey(None, 1, self.MOD, self.VK_T):
+            self.q.put("taken")
+            return
+        msg = ctypes.wintypes.MSG()
+        try:
+            while u.GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:
+                if msg.message == 0x0312:      # WM_HOTKEY
+                    self.q.put("hotkey")
+        finally:
+            u.UnregisterHotKey(None, 1)
+
+    def stop(self):
+        if self.tid:
+            ctypes.windll.user32.PostThreadMessageW(self.tid, 0x0012, 0, 0)   # WM_QUIT
 
 
 # ───────────────────────── app ─────────────────────────
@@ -327,6 +430,10 @@ class App:
         self._downloading = False
         self._checking = False
         self._last_check = None
+        self._drag = None
+        self._toasts = []
+        self._hotkey = None
+        self._hk_queue = queue.Queue()
 
         self._fonts()
         self._set_colors()
@@ -347,6 +454,10 @@ class App:
         self.root.bind("<Escape>", lambda e: self.close_menu())
         if UPDATE_MANIFEST:
             self.root.after(3000, lambda: self.check_updates(False))
+        self.root.after(2500, self._check_reminders)
+        if IS_WIN and self.st.get("hotkey", True):
+            self.root.after(300, self._start_hotkey)
+        self.root.after(150, self._poll_hotkey)
 
     # ---------- basics ----------
     def px(self, n):
@@ -372,11 +483,13 @@ class App:
         if self.icofam:
             self.I = dict(pin="\uE718", pinned="\uE840", more="\uE712", collapse="\uE76C",
                           expand="\uE76B", add="\uE710", delete="\uE74D", edit="\uE70F",
-                          sun="\uE706", moon="\uE708")
+                          sun="\uE706", moon="\uE708", star="\uE734", starred="\uE735",
+                          due="\uE823", bell="\uEA8F", close="\uE711")
         else:
             self.icofam = base
             self.I = dict(pin="○", pinned="●", more="⋯", collapse="›", expand="‹",
-                          add="+", delete="✕", edit="✎", sun="☀", moon="☾")
+                          add="+", delete="✕", edit="✎", sun="☀", moon="☾", star="☆", starred="★",
+                          due="◷", bell="◷", close="✕")
 
     def _apply_font_sizes(self):
         base, semi = self._ff
@@ -462,6 +575,7 @@ class App:
     def _build_all(self):
         self._ov = None
         self._menu = None
+        self._drag = None
         for w in self.root.winfo_children():
             if not isinstance(w, tk.Menu):
                 w.destroy()
@@ -506,6 +620,9 @@ class App:
 
         self.lbl_date = tk.Label(main, text=fmt_today(), font=self.f_sub, bg=P, fg=C["muted"], anchor="w")
         self.lbl_date.pack(fill="x", padx=self.px(14))
+
+        self.tabs_slot = tk.Frame(main, bg=P)            # list tabs: My tasks · Work · +
+        self.tabs_slot.pack(fill="x", padx=self.px(12), pady=(self.px(10), 0))
 
         prog = tk.Frame(main, bg=P)
         prog.pack(fill="x", padx=self.px(14), pady=(self.px(12), 0))
@@ -691,7 +808,8 @@ class App:
             self.entry.focus_force()
             return
         self.store.tasks.append({"id": uuid.uuid4().hex, "text": v, "done": False,
-                                 "created": now_iso(), "done_at": None})
+                                 "created": now_iso(), "done_at": None, "list": self.cur,
+                                 "starred": False, "due": None, "reminded": False})
         self.store.save()
         self.entry.delete(0, "end")
         self.render()
@@ -732,7 +850,7 @@ class App:
         self._footer_undo("Task deleted")
 
     def clear_done(self):
-        n = sum(1 for t in self.store.tasks if t["done"])
+        n = sum(1 for t in self.store.tasks if t["done"] and t.get("list") == self.cur)
         if not n:
             return
         if self.st.get("confirm_delete", True):
@@ -742,11 +860,12 @@ class App:
             self._do_clear_done()
 
     def _do_clear_done(self):
-        removed = [(i, t) for i, t in enumerate(self.store.tasks) if t["done"]]
+        removed = [(i, t) for i, t in enumerate(self.store.tasks) if t["done"] and t.get("list") == self.cur]
         if not removed:
             return
         self.undo_stack = removed
-        self.store.data["tasks"] = [t for t in self.store.tasks if not t["done"]]
+        gone = {id(t) for _, t in removed}
+        self.store.data["tasks"] = [t for t in self.store.tasks if id(t) not in gone]
         self.store.save()
         self.render()
         self._footer_undo(f"Cleared {len(removed)} completed")
@@ -1017,7 +1136,8 @@ class App:
             self._footer_msg("Update cancelled", 6000)
 
     def _footer_default(self):
-        self.footer.config(text="Enter: add  ·  Double-click: edit  ·  Ctrl+Z: undo",
+        self.footer.config(text=("Ctrl+Alt+T: open from anywhere  ·  Drag to reorder" if IS_WIN
+                                 else "Enter: add  ·  Drag to reorder  ·  Ctrl+Z: undo"),
                            fg=self.C["faint"], cursor="")
 
     def _footer_undo(self, msg):
@@ -1238,8 +1358,11 @@ class App:
             switch("Start with Windows", bool(autostart_get()), self._set_auto)
         switch("Ask before deleting", self.st.get("confirm_delete", True),
                lambda v: self._set_setting("confirm_delete", v))
+        if IS_WIN:
+            switch("Ctrl+Alt+T opens AlTask", self.st.get("hotkey", True), self._set_hotkey)
         divider()
-        action("Clear completed", self.clear_done, enabled=any(t["done"] for t in self.store.tasks))
+        action("Clear completed", self.clear_done,
+               enabled=any(t["done"] and t.get("list") == self.cur for t in self.store.tasks))
         if IS_WIN:
             action("Open data folder", self._open_data)
         action(f"About {APP_TITLE}", self.show_about)
@@ -1272,8 +1395,9 @@ class App:
     def _draw_bar(self):
         c = self.bar
         c.delete("all")
-        n = len(self.store.tasks)
-        d = sum(1 for t in self.store.tasks if t["done"])
+        mine = self.list_tasks()
+        n = len(mine)
+        d = sum(1 for t in mine if t["done"])
         if not (n and d):
             return
         width = int(c.winfo_width() * d / n)
@@ -1296,9 +1420,10 @@ class App:
                       angle=90, font=self.f_sec, fill=self.C["text"])
 
     def _update_header(self):
-        n = len(self.store.tasks)
-        d = sum(1 for t in self.store.tasks if t["done"])
-        self.lbl_prog.config(text=f"{d} of {n} completed" if n else "No tasks yet")
+        mine = self.list_tasks()
+        n = len(mine)
+        d = sum(1 for t in mine if t["done"])
+        self.lbl_prog.config(text=f"{d} of {n} completed" if n else "No tasks in this list yet")
         self._draw_bar()
         self._draw_tab()
 
@@ -1337,9 +1462,151 @@ class App:
         else:
             tk.Label(f, text=f"{title}  {n}", font=self.f_sec, bg=P, fg=C["muted"]).pack(side="left")
 
-    def _row(self, t):
+    # ---------- lists ----------
+    @property
+    def cur(self):
+        ids = [l["id"] for l in self.st["lists"]]
+        if self.st.get("current_list") not in ids:
+            self.st["current_list"] = ids[0]
+        return self.st["current_list"]
+
+    def list_tasks(self, list_id=None):
+        lid = list_id or self.cur
+        return [t for t in self.store.tasks if t.get("list") == lid]
+
+    def switch_list(self, lid):
+        if lid != self.cur:
+            self.st["current_list"] = lid
+            self.store.save()
+            self.undo_stack = []
+            self._footer_default()
+            self.canvas.yview_moveto(0)
+            self.render()
+
+    def _draw_lists(self):
+        slot = getattr(self, "tabs_slot", None)
+        if slot is None or not slot.winfo_exists():
+            return
+        for w in slot.winfo_children():
+            w.destroy()
+        C = self.C
+        P = C["panel"]
+        avail = max(self.px(150), self.root.winfo_width() - self.px(32))
+        row = tk.Frame(slot, bg=P)
+        row.pack(fill="x", anchor="w")
+        used = 0
+        chips = [(l["id"], l["name"]) for l in self.st["lists"]] + [(None, "+")]
+        for lid, name in chips:
+            if lid is None:
+                text = "+  New list" if len(self.st["lists"]) == 1 else "+"
+            else:
+                n = sum(1 for t in self.store.tasks if t.get("list") == lid and not t["done"])
+                text = f"{name}  {n}" if n else name
+            active = lid == self.cur
+            bg = C["accent"] if active else C["btn_hover"]
+            fg = C["on_accent"] if active else C["muted"]
+            font = self.f_sec if active else self.f_meta
+            need = font.measure(text) + self.px(28)
+            if used and used + need > avail:                     # wrap to the next line
+                row = tk.Frame(slot, bg=P)
+                row.pack(fill="x", anchor="w", pady=(self.px(6), 0))
+                used = 0
+            chip = tk.Label(row, text=text, font=font, bg=bg, fg=fg, cursor="hand2",
+                            padx=self.px(11), pady=self.px(5))
+            chip.pack(side="left", padx=(0, self.px(6)))
+            used += need
+            if lid is None:
+                chip.bind("<Button-1>", lambda e: self.new_list())
+            else:
+                chip.bind("<Button-1>", lambda e, l=lid: self.switch_list(l))
+                chip.bind("<Double-Button-1>", lambda e, l=lid: self.list_options(l))
+                chip.bind("<Button-3>", lambda e, l=lid: self.list_options(l))
+            if not active:
+                chip.bind("<Enter>", lambda e, c=chip: c.config(fg=C["text"]))
+                chip.bind("<Leave>", lambda e, c=chip: c.config(fg=C["muted"]))
+
+    def _text_dialog(self, title, sub, initial, ok_text, on_ok, danger=None):
+        """In-panel dialog with one text field. danger = (label, callback) for a red button."""
+        card, close = self._overlay()
+        if card is None:
+            return
+        C = self.C
+        pad = self.px(20)
+        tk.Label(card, text=title, font=self.f_btn, bg=C["row"], fg=C["text"], anchor="w"
+                 ).pack(fill="x", padx=pad, pady=(pad, self.px(4)))
+        if sub:
+            tk.Label(card, text=sub, font=self.f_meta, bg=C["row"], fg=C["muted"], anchor="w",
+                     justify="left").pack(fill="x", padx=pad)
+        e = tk.Entry(card, font=self.f_text, bg=C["input"], fg=C["text"], insertbackground=C["text"],
+                     relief="flat", highlightthickness=1, highlightcolor=C["accent"],
+                     highlightbackground=C["line"])
+        e.insert(0, initial)
+        e.pack(fill="x", padx=pad, pady=(self.px(12), 0), ipady=self.px(6))
+        err = tk.Label(card, text="", font=self.f_meta, bg=C["row"], fg=C["danger"], anchor="w")
+        err.pack(fill="x", padx=pad)
+        btns = tk.Frame(card, bg=C["row"])
+        btns.pack(fill="x", padx=pad, pady=(self.px(10), pad))
+
+        def ok(_=None):
+            v = e.get().strip()
+            if not v:
+                err.config(text="Please type a name")
+                return
+            close()
+            on_ok(v)
+        self._dlg_button(btns, ok_text, C["accent"], C["on_accent"], C["accent_hover"], ok).pack(side="right")
+        self._dlg_button(btns, "Cancel", C["btn_hover"], C["text"], C["line"], close
+                         ).pack(side="right", padx=(0, self.px(8)))
+        if danger:
+            lbl, cb = danger
+            self._dlg_button(btns, lbl, C["row"], C["danger"], C["btn_hover"],
+                             lambda: (close(), self.root.after(10, cb))).pack(side="left")
+        e.bind("<Return>", ok)
+        e.bind("<Escape>", close)
+        self.root.after(30, lambda: e.winfo_exists() and (e.focus_force(), e.select_range(0, "end")))
+
+    def new_list(self):
+        def create(name):
+            lid = uuid.uuid4().hex[:8]
+            self.st["lists"].append({"id": lid, "name": name[:40]})
+            self.st["current_list"] = lid
+            self.store.save()
+            self.render()
+        self._text_dialog("New list", "For example Work, Home or Shopping.", "", "Create", create)
+
+    def list_options(self, lid):
+        lst = next((l for l in self.st["lists"] if l["id"] == lid), None)
+        if lst is None:
+            return
+
+        def rename(name):
+            lst["name"] = name[:40]
+            self.store.save()
+            self.render()
+
+        def delete():
+            n = len(self.list_tasks(lid))
+            what = "It has no tasks." if not n else \
+                f"Its {n} task{'s' if n != 1 else ''} will be deleted too."
+            self.confirm(f"Delete “{lst['name']}”?", what, lambda: self._do_delete_list(lid))
+        can_delete = len(self.st["lists"]) > 1
+        self._text_dialog("Rename list", None, lst["name"], "Save", rename,
+                          danger=("Delete list", delete) if can_delete else None)
+
+    def _do_delete_list(self, lid):
+        self.st["lists"] = [l for l in self.st["lists"] if l["id"] != lid]
+        self.store.data["tasks"] = [t for t in self.store.tasks if t.get("list") != lid]
+        self.undo_stack = []
+        self.store._migrate()
+        self.store.save()
+        self.render()
+        self._footer_msg("List deleted")
+
+    # ---------- task rows ----------
+    def _row(self, t, draggable=False):
         C = self.C
         R = C["row"]
+        H = C["row_hover"]
         done = t["done"]
         row = tk.Frame(self.inner, bg=R, highlightthickness=1, highlightbackground=C["line"])
         row.pack(fill="x", padx=self.px(12), pady=(0, self.px(7)))
@@ -1349,29 +1616,71 @@ class App:
         cb.pack(side="left", anchor="n", padx=(self.px(10), self.px(8)), pady=self.px(10))
         self._draw_check(cb, done)
 
-        acts = tk.Frame(row, bg=R)
-        acts.pack(side="right", anchor="n", padx=(0, self.px(4)), pady=self.px(6))
-        be = tk.Label(acts, text=self.I["edit"], font=(self.icofam, 11), bg=R, fg=R,
-                      cursor="hand2", padx=self.px(7), pady=self.px(5))
-        bd = tk.Label(acts, text=self.I["delete"], font=(self.icofam, 11), bg=R, fg=R,
-                      cursor="hand2", padx=self.px(7), pady=self.px(5))
-        be.pack(side="left", padx=(0, self.px(2)))
-        bd.pack(side="left")
-
         body = tk.Frame(row, bg=R)
-        body.pack(side="left", fill="both", expand=True, pady=self.px(9))
+        body.pack(side="left", fill="both", expand=True, pady=self.px(9), padx=(0, self.px(10)))
         lbl = tk.Label(body, text=t["text"], font=self.f_done if done else self.f_text,
                        fg=C["muted"] if done else C["text"], bg=R, justify="left", anchor="w")
         lbl.pack(fill="x")
-        meta_txt = ("Completed " + fmt_short(t.get("done_at") or "")) if done \
-            else ("Added " + fmt_short(t.get("created") or ""))
-        meta = tk.Label(body, text=meta_txt, font=self.f_meta, fg=C["faint"], bg=R, anchor="w")
-        meta.pack(fill="x", pady=(self.px(2), 0))
         self.wrap_labels.append(lbl)
-        # wrap exactly at the width the text area really gets
         body.bind("<Configure>", lambda e: lbl.configure(wraplength=max(60, e.width - self.px(4))), add="+")
 
-        widgets = [row, cb, acts, be, bd, body, lbl, meta]
+        # meta line: ★  ·  due  ·  added / completed
+        meta = tk.Frame(body, bg=R)
+        meta.pack(fill="x", pady=(self.px(3), 0))
+        metas = [meta]
+        if t.get("starred") and not done:
+            s1 = tk.Label(meta, text=self.I["starred"], font=(self.icofam, 9), bg=R, fg=STAR)
+            s1.pack(side="left", padx=(0, self.px(6)))
+            metas.append(s1)
+        due = t.get("due")
+        shown_due = False
+        if due and not done:
+            try:
+                dd = datetime.fromisoformat(due)
+            except Exception:
+                dd = None
+            if dd:
+                now = datetime.now()
+                if dd <= now:
+                    col, txt = C["danger"], "Overdue · " + fmt_due(due)
+                elif dd.date() == now.date():
+                    col, txt = C["accent"], fmt_due(due)
+                else:
+                    col, txt = C["muted"], fmt_due(due)
+                d1 = tk.Label(meta, text=self.I["due"], font=(self.icofam, 9), bg=R, fg=col)
+                d1.pack(side="left", padx=(0, self.px(4)))
+                d2 = tk.Label(meta, text=txt, font=self.f_sec, bg=R, fg=col)
+                d2.pack(side="left", padx=(0, self.px(8)))
+                metas += [d1, d2]
+                shown_due = True
+        if not shown_due:                     # the due date replaces "Added …" to keep one short line
+            meta_txt = ("Completed " + fmt_short(t.get("done_at") or "")) if done \
+                else ("Added " + fmt_short(t.get("created") or ""))
+            m3 = tk.Label(meta, text=meta_txt, font=self.f_meta, fg=C["faint"], bg=R, anchor="w")
+            m3.pack(side="left")
+            metas.append(m3)
+
+        # hover action bar (floats over the right edge, so text keeps its full width)
+        acts = tk.Frame(row, bg=H)
+        buttons = []
+
+        def act(key, cmd, hover_col, fg=None):
+            b = tk.Label(acts, text=self.I[key], font=(self.icofam, 11), bg=H, fg=fg or C["muted"],
+                         cursor="hand2", padx=self.px(6), pady=self.px(4))
+            b.pack(side="left")
+            b.bind("<Button-1>", lambda e: cmd())
+            b._fg = fg or C["muted"]
+            b.bind("<Enter>", lambda e, b=b: b.configure(fg=hover_col, bg=C["btn_hover"]))
+            b.bind("<Leave>", lambda e, b=b: b.configure(fg=b._fg, bg=H))
+            buttons.append(b)
+        if not done:
+            act("starred" if t.get("starred") else "star", lambda: self.toggle_star(t), STAR,
+                fg=STAR if t.get("starred") else None)
+            act("due", lambda: self.show_due(t), C["accent"])
+        act("edit", lambda: self._edit(t, lbl, meta, body), C["accent"])
+        act("delete", lambda: self.delete(t), C["danger"])
+
+        widgets = [row, cb, body, lbl] + metas
         rowpath = str(row)
 
         def inside(e):
@@ -1382,34 +1691,34 @@ class App:
             return w is not None and (str(w) == rowpath or str(w).startswith(rowpath + "."))
 
         def enter(e):
+            if self._drag:
+                return
             for w in widgets:
-                w.configure(bg=C["row_hover"])
-            be.configure(fg=C["muted"])
-            bd.configure(fg=C["muted"])
+                w.configure(bg=H)
             self._draw_check(cb, done, hover=True)
+            acts.place(relx=1.0, x=-self.px(6), y=self.px(6), anchor="ne")
+            acts.lift()
 
         def leave(e):
             if inside(e):
                 return
             for w in widgets:
                 w.configure(bg=R)
-            be.configure(fg=R)
-            bd.configure(fg=R)
             self._draw_check(cb, done)
+            acts.place_forget()
 
-        for w in widgets:
+        for w in widgets + [acts] + buttons:
             w.bind("<Enter>", enter, add="+")
             w.bind("<Leave>", leave, add="+")
-        for b, col in ((be, C["accent"]), (bd, C["danger"])):
-            b.bind("<Enter>", lambda e, b=b, col=col: b.configure(fg=col, bg=C["btn_hover"]), add="+")
-            b.bind("<Leave>", lambda e, b=b: b.configure(fg=C["muted"], bg=C["row_hover"])
-                   if inside(e) else None, add="+")
 
         cb.bind("<Button-1>", lambda e: self.toggle(t))
-        bd.bind("<Button-1>", lambda e: self.delete(t))
-        be.bind("<Button-1>", lambda e: self._edit(t, lbl, meta, body))
-        for w in (lbl, meta, body):
+        for w in [lbl, body] + metas:
             w.bind("<Double-Button-1>", lambda e: self._edit(t, lbl, meta, body))
+        if draggable:
+            for w in [row, body, lbl] + metas:
+                w.bind("<ButtonPress-1>", lambda e: self._drag_press(e, t, row), add="+")
+                w.bind("<B1-Motion>", self._drag_motion, add="+")
+                w.bind("<ButtonRelease-1>", self._drag_release, add="+")
         return row
 
     def _edit(self, t, lbl, meta, body):
@@ -1441,14 +1750,348 @@ class App:
         e.bind("<Escape>", lambda _: finish(False))
         e.bind("<FocusOut>", lambda _: finish(True))
 
+    # ---------- priority ----------
+    def toggle_star(self, t):
+        t["starred"] = not t.get("starred")
+        self.store.save()
+        self.render()
+
+    # ---------- drag to reorder ----------
+    def _drag_press(self, e, t, row):
+        self._drag = None
+        self._press = (e.y_root, t, row)
+
+    def _drag_motion(self, e):
+        press = getattr(self, "_press", None)
+        if not press:
+            return
+        y0, t, row = press
+        if self._drag is None:
+            if abs(e.y_root - y0) < self.px(6):
+                return
+            self._drag = {"task": t, "row": row, "index": None}
+            row.configure(highlightbackground=self.C["accent"], highlightthickness=2)
+            self.inner.configure(cursor="fleur")
+            self._drop_line = tk.Frame(self.inner, bg=self.C["accent"], height=self.px(3))
+        # where would it land?
+        rows = [(r, tk_) for r, tk_ in self._pending_rows if r.winfo_exists()]
+        y = e.y_root - self.inner.winfo_rooty()
+        idx = len(rows)
+        for i, (r, _) in enumerate(rows):
+            if y < r.winfo_y() + r.winfo_height() / 2:
+                idx = i
+                break
+        self._drag["index"] = idx
+        if rows:
+            if idx < len(rows):
+                ly = rows[idx][0].winfo_y() - self.px(5)
+            else:
+                last = rows[-1][0]
+                ly = last.winfo_y() + last.winfo_height() + self.px(2)
+            self._drop_line.place(x=self.px(12), y=ly, relwidth=1.0, width=-self.px(24))
+            self._drop_line.lift()
+        # auto-scroll near the edges
+        ch = self.canvas.winfo_height()
+        cy = e.y_root - self.canvas.winfo_rooty()
+        if cy < self.px(30):
+            self.canvas.yview_scroll(-1, "units")
+        elif cy > ch - self.px(30):
+            self.canvas.yview_scroll(1, "units")
+
+    def _drag_release(self, e):
+        drag, self._drag, self._press = self._drag, None, None
+        line = getattr(self, "_drop_line", None)
+        if line is not None and line.winfo_exists():
+            line.destroy()
+        self.inner.configure(cursor="")
+        if not drag or drag["index"] is None:
+            return
+        t, idx = drag["task"], drag["index"]
+        order = [tk_ for _, tk_ in self._pending_rows]
+        if t not in order:
+            self.render()
+            return
+        old = order.index(t)
+        order.pop(old)
+        if idx > old:
+            idx -= 1
+        order.insert(idx, t)
+        # dropped among starred tasks -> starred; among normal ones -> normal
+        neighbour = order[idx + 1] if idx + 1 < len(order) else (order[idx - 1] if idx > 0 else None)
+        if neighbour is not None:
+            t["starred"] = bool(neighbour.get("starred"))
+        # write the new order back into the same slots of the task list
+        slots = [i for i, x in enumerate(self.store.tasks) if x in order]
+        for i, x in zip(slots, order):
+            self.store.tasks[i] = x
+        self.store.save()
+        self.render()
+
+    # ---------- due dates ----------
+    def show_due(self, t):
+        card, close = self._overlay()
+        if card is None:
+            return
+        C = self.C
+        pad = self.px(20)
+        now = datetime.now()
+        tk.Label(card, text="Due date & reminder", font=self.f_btn, bg=C["row"], fg=C["text"],
+                 anchor="w").pack(fill="x", padx=pad, pady=(pad, self.px(2)))
+        txt = t["text"] if len(t["text"]) <= 60 else t["text"][:57] + "…"
+        tk.Label(card, text=txt, font=self.f_meta, bg=C["row"], fg=C["muted"], anchor="w",
+                 justify="left").pack(fill="x", padx=pad)
+
+        def save(when):
+            close()
+            t["due"] = when.isoformat(timespec="minutes")
+            t["reminded"] = False
+            self.store.save()
+            self.render()
+            self._footer_msg(f"Reminder set · {fmt_due(t['due'])}")
+
+        # quick picks
+        nxt = (now + timedelta(hours=1)).replace(second=0, microsecond=0)
+        nxt = nxt.replace(minute=(nxt.minute // 5) * 5)
+        tomorrow9 = (now + timedelta(days=1)).replace(hour=9, minute=0, second=0, microsecond=0)
+        monday = (now + timedelta(days=(7 - now.weekday()) or 7)).replace(hour=9, minute=0,
+                                                                           second=0, microsecond=0)
+        picks = [("In 1 hour", nxt)]
+        evening = now.replace(hour=18, minute=0, second=0, microsecond=0)
+        if evening - now > timedelta(minutes=30):
+            picks.append(("This evening 18:00", evening))
+        picks += [("Tomorrow 09:00", tomorrow9), ("Next Monday 09:00", monday)]
+        grid = tk.Frame(card, bg=C["row"])
+        grid.pack(fill="x", padx=pad, pady=(self.px(14), 0))
+        for i, (label, when) in enumerate(picks):
+            b = tk.Label(grid, text=label, font=self.f_meta, bg=C["btn_hover"], fg=C["text"],
+                         cursor="hand2", pady=self.px(7))
+            b.grid(row=i // 2, column=i % 2, sticky="ew", padx=(0 if i % 2 == 0 else self.px(6), 0),
+                   pady=(0, self.px(6)))
+            b.bind("<Button-1>", lambda e, w=when: save(w))
+            b.bind("<Enter>", lambda e, b=b: b.config(bg=C["accent"], fg=C["on_accent"]))
+            b.bind("<Leave>", lambda e, b=b: b.config(bg=C["btn_hover"], fg=C["text"]))
+        grid.columnconfigure(0, weight=1, uniform="q")
+        grid.columnconfigure(1, weight=1, uniform="q")
+
+        # custom date + time
+        tk.Label(card, text="OR PICK A DATE AND TIME", font=self.f_sec, bg=C["row"], fg=C["faint"],
+                 anchor="w").pack(fill="x", padx=pad, pady=(self.px(10), self.px(6)))
+        cur = None
+        if t.get("due"):
+            try:
+                cur = datetime.fromisoformat(t["due"])
+            except Exception:
+                cur = None
+        base = cur or nxt
+        f = tk.Frame(card, bg=C["row"])
+        f.pack(fill="x", padx=pad)
+
+        def field(parent, value, width):
+            e = tk.Entry(parent, font=self.f_text, bg=C["input"], fg=C["text"], width=width,
+                         insertbackground=C["text"], relief="flat", highlightthickness=1,
+                         highlightcolor=C["accent"], highlightbackground=C["line"], justify="center")
+            e.insert(0, value)
+            return e
+        de = field(f, base.strftime("%d.%m.%Y"), 11)
+        de.pack(side="left", fill="x", expand=True, ipady=self.px(6))
+        te = field(f, base.strftime("%H:%M"), 6)
+        te.pack(side="left", padx=(self.px(8), 0), ipady=self.px(6))
+        tk.Label(card, text="dd.mm.yyyy  ·  hh:mm   (also: today, tomorrow)", font=self.f_meta,
+                 bg=C["row"], fg=C["faint"], anchor="w").pack(fill="x", padx=pad, pady=(self.px(4), 0))
+        err = tk.Label(card, text="", font=self.f_meta, bg=C["row"], fg=C["danger"], anchor="w")
+        err.pack(fill="x", padx=pad)
+
+        def custom(_=None):
+            try:
+                when = parse_due(de.get(), te.get())
+            except ValueError as ex:
+                err.config(text=str(ex) if str(ex).startswith("Use") else "Check the date and time")
+                return
+            if when <= datetime.now():
+                err.config(text="That time has already passed")
+                return
+            save(when)
+
+        btns = tk.Frame(card, bg=C["row"])
+        btns.pack(fill="x", padx=pad, pady=(self.px(8), pad))
+        self._dlg_button(btns, "Set", C["accent"], C["on_accent"], C["accent_hover"], custom).pack(side="right")
+        self._dlg_button(btns, "Cancel", C["btn_hover"], C["text"], C["line"], close
+                         ).pack(side="right", padx=(0, self.px(8)))
+        if t.get("due"):
+            def remove():
+                close()
+                t["due"] = None
+                t["reminded"] = False
+                self.store.save()
+                self.render()
+            self._dlg_button(btns, "Remove", C["row"], C["danger"], C["btn_hover"], remove).pack(side="left")
+        for e in (de, te):
+            e.bind("<Return>", custom)
+            e.bind("<Escape>", close)
+
+    # ---------- reminders ----------
+    def _check_reminders(self):
+        try:
+            now = datetime.now()
+            changed = False
+            for t in list(self.store.tasks):
+                if t["done"] or not t.get("due") or t.get("reminded"):
+                    continue
+                try:
+                    due = datetime.fromisoformat(t["due"])
+                except Exception:
+                    continue
+                if due <= now:
+                    t["reminded"] = True
+                    changed = True
+                    self._toast(t)
+            if changed:
+                self.store.save()
+                self.render()
+        finally:
+            self.root.after(20000, self._check_reminders)
+
+    def _toast(self, t):
+        """Reminder pop-up next to the panel (bottom right), above other windows."""
+        C = self.C
+        w = self.px(330)
+        win = tk.Toplevel(self.root)
+        win.withdraw()
+        win.overrideredirect(True)
+        win.attributes("-topmost", True)
+        win.configure(bg=C["accent"])
+        card = tk.Frame(win, bg=C["row"])
+        card.pack(fill="both", expand=True, padx=(self.px(4), 1), pady=1)
+        pad = self.px(16)
+        top = tk.Frame(card, bg=C["row"])
+        top.pack(fill="x", padx=pad, pady=(pad, 0))
+        tk.Label(top, image=self._logo_hdr, bg=C["row"]).pack(side="left")
+        tk.Label(top, text="REMINDER", font=self.f_sec, bg=C["row"], fg=C["accent"]).pack(
+            side="left", padx=(self.px(8), 0))
+        tk.Label(top, text=fmt_due(t["due"]), font=self.f_meta, bg=C["row"], fg=C["muted"]).pack(
+            side="left", padx=(self.px(8), 0))
+        x = tk.Label(top, text=self.I["close"], font=(self.icofam, 10), bg=C["row"], fg=C["muted"],
+                     cursor="hand2", padx=self.px(4))
+        x.pack(side="right")
+        tk.Label(card, text=t["text"], font=self.f_btn, bg=C["row"], fg=C["text"], anchor="w",
+                 justify="left", wraplength=w - 2 * pad - self.px(8)).pack(fill="x", padx=pad,
+                                                                         pady=(self.px(10), 0))
+        btns = tk.Frame(card, bg=C["row"])
+        btns.pack(fill="x", padx=pad, pady=(self.px(14), pad))
+
+        def close():
+            if win in self._toasts:
+                self._toasts.remove(win)
+            win.destroy()
+            self._stack_toasts()
+
+        def done():
+            close()
+            if t in self.store.tasks and not t["done"]:
+                self.toggle(t)
+
+        def snooze():
+            close()
+            if t in self.store.tasks:
+                t["due"] = (datetime.now() + timedelta(minutes=10)).isoformat(timespec="minutes")
+                t["reminded"] = False
+                self.store.save()
+                self.render()
+
+        def open_():
+            close()
+            self.show_panel(focus_entry=False)
+            if t in self.store.tasks:
+                self.switch_list(t.get("list"))
+        x.bind("<Button-1>", lambda e: close())
+        self._dlg_button(btns, "Done", C["accent"], C["on_accent"], C["accent_hover"], done).pack(side="left")
+        self._dlg_button(btns, "Snooze 10 min", C["btn_hover"], C["text"], C["line"], snooze).pack(
+            side="left", padx=(self.px(8), 0))
+        self._dlg_button(btns, "Open", C["row"], C["muted"], C["btn_hover"], open_).pack(side="right")
+        win.update_idletasks()
+        win.toast_h = win.winfo_reqheight()
+        win.toast_w = w
+        self._toasts.append(win)
+        self._stack_toasts()
+        win.deiconify()
+        if IS_WIN:
+            try:
+                import winsound
+                winsound.MessageBeep(0x40)
+            except Exception:
+                pass
+
+    def _stack_toasts(self):
+        l, top, r, b = work_area(self.root)
+        panel = self.root.winfo_width() if self.root.winfo_ismapped() else 0
+        y = b - self.px(16)
+        for win in reversed(self._toasts):
+            if not win.winfo_exists():
+                continue
+            y -= win.toast_h
+            win.geometry(f"{win.toast_w}x{win.toast_h}+{r - panel - win.toast_w - self.px(16)}+{y}")
+            y -= self.px(10)
+
+    # ---------- open from anywhere (Ctrl+Alt+T) ----------
+    def show_panel(self, focus_entry=True):
+        self.close_menu()
+        if self.st["collapsed"]:
+            self.toggle_collapse()
+        self.root.deiconify()
+        self.root.lift()
+        if IS_WIN:
+            try:
+                u = ctypes.windll.user32
+                hwnd = u.GetParent(self.root.winfo_id())
+                u.SetForegroundWindow(ctypes.c_void_p(hwnd))
+            except Exception:
+                pass
+        self.root.focus_force()
+        if focus_entry and self._ov is None:
+            self.entry.focus_force()
+            self._ph_hide()
+
+    def _start_hotkey(self):
+        self._stop_hotkey()
+        hk = _HotKey(self._hk_queue)
+        hk.start()
+        self._hotkey = hk
+
+    def _stop_hotkey(self):
+        if self._hotkey is not None:
+            self._hotkey.stop()
+            self._hotkey = None
+
+    def _set_hotkey(self, on):
+        self._set_setting("hotkey", on)
+        if on:
+            self._start_hotkey()
+        else:
+            self._stop_hotkey()
+
+    def _poll_hotkey(self):
+        try:
+            while True:
+                msg = self._hk_queue.get_nowait()
+                if msg == "hotkey":
+                    self.show_panel()
+                elif msg == "taken":
+                    self._footer_msg("Ctrl+Alt+T is already used by another app", 8000)
+        except queue.Empty:
+            pass
+        self.root.after(150, self._poll_hotkey)
+
+    # ---------- render ----------
     def render(self):
         for w in self.inner.winfo_children():
             w.destroy()
         self.wrap_labels = []
         self._last_pending_row = None
-        tasks = self.store.tasks
-        pending = [t for t in tasks if not t["done"]]
-        done = sorted((t for t in tasks if t["done"]),
+        self._pending_rows = []
+        mine = self.list_tasks()
+        pending = [t for t in mine if not t["done"]]
+        pending.sort(key=lambda t: not t.get("starred"))          # stable: starred first, then your order
+        done = sorted((t for t in mine if t["done"]),
                       key=lambda t: t.get("done_at") or "", reverse=True)
 
         self._section("TO DO", len(pending))
@@ -1457,7 +2100,9 @@ class App:
                      font=self.f_sub, bg=self.C["panel"], fg=self.C["faint"], anchor="w"
                      ).pack(fill="x", padx=self.px(16), pady=(0, self.px(6)))
         for t in pending:
-            self._last_pending_row = self._row(t)
+            row = self._row(t, draggable=True)
+            self._pending_rows.append((row, t))
+            self._last_pending_row = row
 
         if done:
             self._section("COMPLETED", len(done), done_section=True)
@@ -1465,6 +2110,7 @@ class App:
                 for t in done:
                     self._row(t)
 
+        self._draw_lists()
         self._update_header()
         self.root.after_idle(self._update_wrap)
         if self.inner.winfo_reqheight() <= self.canvas.winfo_height():

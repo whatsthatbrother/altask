@@ -1,3 +1,4 @@
-- Tasks is now AlTask! New name, same app — your tasks are kept
-- Moves to C:\Program Files\AlTask automatically (old Tasks shortcuts are replaced)
-- New website: https://whatsthatbrother.github.io/altask/
+- Lists: keep Work, Home and more apart — add one with the + next to "My tasks"
+- Due dates and reminders: hover a task and click the clock; AlTask pops up a reminder with Done / Snooze
+- Star important tasks to keep them on top, and drag tasks to reorder them
+- Press Ctrl+Alt+T in any app to open AlTask and type a task straight away
