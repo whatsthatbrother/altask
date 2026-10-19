@@ -21,9 +21,9 @@ Works on Windows 10 and 11. Your tasks are stored in `%APPDATA%\DetyratNote\task
 ## Releasing a new version
 1. Change `VERSION` in `Tasks.pyw` **and** `Setup.pyw` (e.g. `4.3`) and the numbers in `version_info.txt` / `setup_version_info.txt`
 2. Write what's new in `notes.txt`
-3. Commit, then tag and push: `git tag v4.3 && git push origin main v4.3`
+3. Commit and push to `main`
 
-GitHub Actions builds `Tasks-Setup.exe` on Windows and publishes the release. Every installed copy of Tasks sees it within a few hours.
+GitHub Actions sees the new version, builds `Tasks-Setup.exe` on Windows and publishes release `v4.3`. Every installed copy of Tasks sees it within a few hours.
 
 ## Building locally
 `build.bat` (needs Python 3.10+ for Windows). Output: `dist\Tasks-Setup.exe`.
