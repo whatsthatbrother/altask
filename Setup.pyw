@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Tasks Setup 4.2 — custom installer / uninstaller / updater.
+Tasks Setup 4.3 — custom installer / uninstaller / updater.
 Designed & built by Diar F.
 
 Installs Tasks into  C:\\Program Files\\Tasks, adds Desktop + Start menu shortcuts,
@@ -24,7 +24,7 @@ from tkinter import filedialog
 from tkinter import font as tkfont
 
 APP = "Tasks"
-VERSION = "4.2"
+VERSION = "4.3"
 AUTHOR = "Diar F."
 EXE = "Tasks.exe"
 UNINST_EXE = "Uninstall Tasks.exe"
@@ -165,6 +165,18 @@ def make_shortcuts(items):
     run_hidden(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", "; ".join(lines)])
 
 
+def refresh_icon_cache():
+    """Windows caches icons per file path — make it drop the old (purple) Tasks icon."""
+    try:
+        ctypes.windll.shell32.SHChangeNotify(0x08000000, 0x0000, None, None)   # SHCNE_ASSOCCHANGED
+    except Exception:
+        pass
+    try:
+        run_hidden(["ie4uinit.exe", "-show"], timeout=15)
+    except Exception:
+        pass
+
+
 def set_startup(on, exe_path=None):
     import winreg
     with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY, 0, winreg.KEY_SET_VALUE) as k:
@@ -249,6 +261,7 @@ def do_install(dest, desktop, startup, report):
         report(0.96, "Registering…")
         register_uninstaller(dest, size_kb)
         set_startup(startup, exe_path)
+        refresh_icon_cache()
     for p in (0.97, 0.99, 1.0):
         report(p, "Finishing…")
         time.sleep(0.12)

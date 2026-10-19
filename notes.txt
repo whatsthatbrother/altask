@@ -1,4 +1,3 @@
-- New red eagle icon and red theme
-- New settings menu that no longer closes by itself
-- Automatic updates
-- Faster installer start
+- Smoother, sharper tick marks when you complete a task
+- Update check is easier to find: it sits at the top of the menu and in About, shows when it last checked, and Tasks now checks every hour
+- Taskbar icon now shows the red eagle (old cached purple icon is refreshed)

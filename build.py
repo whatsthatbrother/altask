@@ -23,7 +23,8 @@ def main():
 
     print("\n== Tasks.exe ==")
     pyinstaller("--clean", "--onedir", "--noconsole", "--name", "Tasks",
-                "--icon", "tasks.ico", "--version-file", "version_info.txt", "Tasks.pyw")
+                "--icon", "tasks.ico", "--version-file", "version_info.txt",
+                "--add-data", f"tasks.ico{SEP}.", "Tasks.pyw")
 
     print("\n== payload ==")
     os.makedirs("build", exist_ok=True)
