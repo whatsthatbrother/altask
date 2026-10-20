@@ -1,4 +1,4 @@
-- Lists: keep Work, Home and more apart — add one with the + next to "My tasks"
-- Due dates and reminders: hover a task and click the clock; AlTask pops up a reminder with Done / Snooze
-- Star important tasks to keep them on top, and drag tasks to reorder them
-- Press Ctrl+Alt+T in any app to open AlTask and type a task straight away
+- Repeating tasks: daily, weekdays, weekly or monthly — tick one off and the next one appears
+- Click a task to open it: add steps (a checklist) and notes
+- Today: a new tab with everything due today or overdue, from all your lists
+- Search: press Ctrl+F to find any task, step or note across all lists
