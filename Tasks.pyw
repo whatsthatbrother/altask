@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-AlTask v5.2 — a task panel docked to the right edge of the screen (Windows 10 / 11).
+ALTask v5.3 — a task panel docked to the right edge of the screen (Windows 10 / 11).
 
 - Pure Python 3 standard library (tkinter). No extra packages.
 - Run: double-click Tasks.pyw  (or:  pythonw Tasks.pyw)  — built as AlTask.exe
@@ -10,7 +10,7 @@ AlTask v5.2 — a task panel docked to the right edge of the screen (Windows 10 
 Shortcuts:
   Enter          add task             Ctrl+N       focus the input
   Double-click   edit task            Ctrl+Z       undo delete / clear
-  Drag a task    reorder              Ctrl+Alt+T   open AlTask from anywhere
+  Drag a task    reorder              Ctrl+Alt+T   open ALTask from anywhere
   Click a task   steps, notes         Ctrl+F       search all lists
 """
 import ctypes
@@ -29,7 +29,7 @@ from datetime import datetime, timedelta
 import tkinter as tk
 from tkinter import font as tkfont
 
-VERSION = "5.2"
+VERSION = "5.3"
 AUTHOR = "Diar F."
 try:                                    # written by build.bat from repo.txt
     from update_config import UPDATE_REPO
@@ -37,7 +37,7 @@ except Exception:
     UPDATE_REPO = ""
 UPDATE_MANIFEST = (f"https://github.com/{UPDATE_REPO}/releases/latest/download/latest.json"
                    if UPDATE_REPO else "")
-APP_TITLE = "AlTask"
+APP_TITLE = "ALTask"
 APP_ID = "Detyrat"                      # internal id (registry / mutex) kept from v1
 IS_WIN = sys.platform == "win32"
 DATA_DIR = os.path.join(os.environ.get("APPDATA") or os.path.expanduser("~"), "DetyratNote")
@@ -643,7 +643,7 @@ class App:
         hdr = tk.Frame(main, bg=P)
         hdr.pack(fill="x", padx=(self.px(12), self.px(8)), pady=(self.px(12), 0))
         tk.Label(hdr, image=self._logo_hdr, bg=P).pack(side="left", padx=(0, self.px(8)))
-        # wordmark in capitals: "AlTask" reads like "AITask" in most sans-serif fonts
+        # wordmark in capitals
         tk.Label(hdr, text=APP_TITLE.upper(), font=self.f_title, bg=P, fg=C["text"]).pack(side="left")
         btns = tk.Frame(hdr, bg=P)
         btns.pack(side="right")
@@ -1061,7 +1061,7 @@ class App:
 
         def work():
             try:
-                req = urllib.request.Request(UPDATE_MANIFEST, headers={"User-Agent": f"AlTask/{VERSION}"})
+                req = urllib.request.Request(UPDATE_MANIFEST, headers={"User-Agent": f"ALTask/{VERSION}"})
                 with urllib.request.urlopen(req, timeout=15) as r:
                     q.put(("ok", json.loads(r.read().decode("utf-8"))))
             except Exception as ex:
@@ -1148,7 +1148,7 @@ class App:
 
         def work():
             try:
-                req = urllib.request.Request(url, headers={"User-Agent": f"AlTask/{VERSION}"})
+                req = urllib.request.Request(url, headers={"User-Agent": f"ALTask/{VERSION}"})
                 h = hashlib.sha256()
                 with urllib.request.urlopen(req, timeout=30) as r, open(dest + ".part", "wb") as f:
                     total, got = int(r.headers.get("Content-Length") or 0), 0
@@ -1199,7 +1199,7 @@ class App:
             r = ctypes.windll.shell32.ShellExecuteW(None, "open", path, "--update", None, 1)
             ok = r > 32
         if ok:
-            self.root.after(300, self.root.destroy)        # the installer restarts AlTask when done
+            self.root.after(300, self.root.destroy)        # the installer restarts ALTask when done
         else:
             self._downloading = False
             self._show_update_banner()
@@ -1429,7 +1429,7 @@ class App:
         switch("Ask before deleting", self.st.get("confirm_delete", True),
                lambda v: self._set_setting("confirm_delete", v))
         if IS_WIN:
-            switch("Ctrl+Alt+T opens AlTask", self.st.get("hotkey", True), self._set_hotkey)
+            switch("Ctrl+Alt+T opens ALTask", self.st.get("hotkey", True), self._set_hotkey)
         divider()
         action("Clear completed", self.clear_done,
                enabled=any(t["done"] and t.get("list") == self.cur for t in self.store.tasks))
@@ -2514,6 +2514,6 @@ class App:
 if __name__ == "__main__":
     if not single_instance():
         if IS_WIN:
-            ctypes.windll.user32.MessageBoxW(None, "AlTask is already running.", APP_TITLE, 0x40)
+            ctypes.windll.user32.MessageBoxW(None, "ALTask is already running.", APP_TITLE, 0x40)
         sys.exit(0)
     App().run()

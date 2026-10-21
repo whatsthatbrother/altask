@@ -1,15 +1,15 @@
 # -*- coding: utf-8 -*-
 """
-AlTask Setup 5.2 — custom installer / uninstaller / updater.
+ALTask Setup 5.3 — custom installer / uninstaller / updater.
 Designed & built by Diar F.
 
-Installs AlTask into  C:\\Program Files\\AlTask, adds Desktop + Start menu shortcuts,
+Installs ALTask into  C:\\Program Files\\ALTask, adds Desktop + Start menu shortcuts,
 registers in  Settings > Apps  (with an uninstaller), optional start with Windows.
 
 The same exe is copied into the install folder as "Uninstall AlTask.exe";
 started from there (or with --uninstall) it runs as the uninstaller.
-Started by the app with --update it updates in place and restarts AlTask.
-An older "Tasks" install (4.x) is moved over to AlTask automatically.
+Started by the app with --update it updates in place and restarts ALTask.
+An older "Tasks" install (4.x) is moved over to ALTask automatically.
 """
 import ctypes
 import os
@@ -24,8 +24,8 @@ import tkinter as tk
 from tkinter import filedialog
 from tkinter import font as tkfont
 
-APP = "AlTask"
-VERSION = "5.2"
+APP = "ALTask"
+VERSION = "5.3"
 AUTHOR = "Diar F."
 EXE = "AlTask.exe"
 UNINST_EXE = "Uninstall AlTask.exe"
@@ -146,7 +146,7 @@ def kill_app():
 
 
 def remove_old_tasks():
-    """Move a 4.x install that was still called "Tasks" over to AlTask:
+    """Move a 4.x install that was still called "Tasks" over to ALTask:
     remove its files, shortcuts and Settings > Apps entry. The user's tasks are kept."""
     old = reg_read(OLD_KEY, "InstallLocation")
     if not old:
@@ -182,6 +182,11 @@ def remove_old_inno():
 def make_shortcuts(items):
     """items: list of (lnk_path, target, description)."""
     q = lambda p: "'" + p.replace("'", "''") + "'"
+    for lnk, _, _ in items:              # drop the old "AlTask.lnk" first: Windows would keep its old spelling
+        try:
+            os.remove(lnk)
+        except OSError:
+            pass
     lines = ["$w = New-Object -ComObject WScript.Shell"]
     for lnk, target, desc in items:
         lines += [f"$s = $w.CreateShortcut({q(lnk)})",
@@ -283,9 +288,9 @@ def do_install(dest, desktop, startup, report):
 
     if IS_WIN and not TEST_DIR:
         report(0.90, "Creating shortcuts…")
-        sc = [(os.path.join(common_programs(), APP + ".lnk"), exe_path, f"AlTask — by {AUTHOR}")]
+        sc = [(os.path.join(common_programs(), APP + ".lnk"), exe_path, f"ALTask — by {AUTHOR}")]
         if desktop:
-            sc.append((os.path.join(common_desktop(), APP + ".lnk"), exe_path, f"AlTask — by {AUTHOR}"))
+            sc.append((os.path.join(common_desktop(), APP + ".lnk"), exe_path, f"ALTask — by {AUTHOR}"))
         make_shortcuts(sc)
         report(0.96, "Registering…")
         register_uninstaller(dest, size_kb)
@@ -297,7 +302,7 @@ def do_install(dest, desktop, startup, report):
 
 
 def do_uninstall(dest, remove_data, report):
-    report(0.05, "Closing AlTask…")
+    report(0.05, "Closing ALTask…")
     kill_app()
     if IS_WIN and not TEST_DIR:
         report(0.2, "Removing shortcuts…")
@@ -614,7 +619,7 @@ class SetupUI:
         opts.pack(fill="x", pady=(self.px(22), 0))
         self.c_desktop = Check(opts, self, "Create a desktop shortcut", True)
         self.c_desktop.pack(fill="x", pady=(0, self.px(12)))
-        self.c_startup = Check(opts, self, "Start AlTask when Windows starts", False,
+        self.c_startup = Check(opts, self, "Start ALTask when Windows starts", False,
                                sub="Opens the panel automatically after you sign in")
         self.c_startup.pack(fill="x")
 
@@ -625,7 +630,7 @@ class SetupUI:
 
     def browse(self):
         d = filedialog.askdirectory(parent=self.root, initialdir=os.path.dirname(self.path.get()) or "C:\\",
-                                    title="Choose where to install AlTask")
+                                    title="Choose where to install ALTask")
         if d:
             d = os.path.normpath(d)
             if os.path.basename(d).lower() != APP.lower():
@@ -750,7 +755,7 @@ class SetupUI:
     def page_error(self, msg):
         self.clear()
         self.heading("Something went wrong", "Setup could not finish",
-                     f"{msg}\n\nClose any open AlTask window and run Setup again. "
+                     f"{msg}\n\nClose any open ALTask window and run Setup again. "
                      "If it keeps failing, right-click Setup and choose “Run as administrator”.")
         self.footer([("Close", self.root.destroy, "primary", self.px(120))])
 

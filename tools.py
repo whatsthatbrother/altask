@@ -1,4 +1,4 @@
-"""Build helpers for AlTask (used by build.bat and publish.bat).
+"""Build helpers for ALTask (used by build.bat and publish.bat).
 
   py tools.py config     -> writes update_config.py from repo.txt (baked into AlTask.exe)
   py tools.py manifest   -> writes dist/latest.json (version, download url, sha256, notes)

@@ -1,4 +1,1 @@
-- Repeating tasks: daily, weekdays, weekly or monthly — tick one off and the next one appears
-- Click a task to open it: add steps (a checklist) and notes
-- Today: a new tab with everything due today or overdue, from all your lists
-- Search: press Ctrl+F to find any task, step or note across all lists
+- New name: AlTask is now ALTask

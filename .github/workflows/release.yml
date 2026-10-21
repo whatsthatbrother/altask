@@ -1,6 +1,6 @@
 # Builds the Windows installer and publishes a GitHub release whenever VERSION
 # in Tasks.pyw changes on main (no tag needed - the release creates tag vX.Y).
-# Installed copies of AlTask read releases/latest/download/latest.json and
+# Installed copies of ALTask read releases/latest/download/latest.json and
 # offer the update to the user.
 name: Build & release
 
@@ -64,7 +64,7 @@ jobs:
         with:
           tag_name: v${{ steps.v.outputs.version }}
           target_commitish: ${{ github.sha }}
-          name: AlTask ${{ steps.v.outputs.version }}
+          name: ALTask ${{ steps.v.outputs.version }}
           body_path: notes.txt
           make_latest: true
           files: |
